@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { ClientInfo, MandateType } from "@/lib/types";
 import { buildTargetFolder, clientDisplayName, folderPathString } from "@/lib/folders";
+import { isOneDriveConfigured, uploadToOneDrive, OneDriveResult } from "@/lib/onedrive";
+
+// OneDrive-Upload braucht Node-Runtime und ggf. etwas mehr Zeit.
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // Eine oder mehrere (kommagetrennte) interne Empfängeradressen.
 const NOTIFY_EMAILS = (process.env.NOTIFY_EMAIL || "info@juckertreuhand.ch")
@@ -58,6 +63,30 @@ export async function POST(request: Request) {
       content: f.base64,
     }));
 
+    // Optionaler Upload in die OneDrive-Ordnerstruktur (falls konfiguriert).
+    let oneDrive: OneDriveResult | null = null;
+    if (isOneDriveConfigured()) {
+      oneDrive = await uploadToOneDrive(
+        folderParts,
+        files.map((f) => ({
+          name: f.name,
+          type: f.type,
+          content: Buffer.from(f.base64, "base64"),
+        }))
+      );
+    }
+
+    // Statusblock OneDrive für die interne E-Mail.
+    let oneDriveHtml = "";
+    if (oneDrive?.ok) {
+      const link = oneDrive.webUrl
+        ? ` &middot; <a href="${escapeHtml(oneDrive.webUrl)}" style="color: #114c81;">Ordner öffnen</a>`
+        : "";
+      oneDriveHtml = `<div style="background: #ecfdf3; border: 1px solid #abefc6; border-radius: 8px; padding: 10px 16px; margin: 12px 0; font-size: 13px; color: #067647;">&#10003; In OneDrive abgelegt (${oneDrive.uploaded} Datei(en))${link}</div>`;
+    } else if (oneDrive && !oneDrive.ok) {
+      oneDriveHtml = `<div style="background: #fef3f2; border: 1px solid #fecdca; border-radius: 8px; padding: 10px 16px; margin: 12px 0; font-size: 13px; color: #b42318;">&#9888; OneDrive-Upload fehlgeschlagen – bitte Dateien aus dem Anhang manuell ablegen.<br /><span style="color: #999;">${escapeHtml(oneDrive.error || "Unbekannter Fehler")}</span></div>`;
+    }
+
     // Kundendaten-Zeilen für die interne E-Mail (nur ausgefüllte Felder).
     const addressLine = [clientInfo.strasse, [clientInfo.plz, clientInfo.ort].filter(Boolean).join(" ")]
       .filter(Boolean)
@@ -109,6 +138,8 @@ export async function POST(request: Request) {
           <p style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #114c81; margin: 0 0 4px;">Zielordner</p>
           <p style="font-size: 14px; margin: 0; color: #161922;">${escapeHtml(folderPath)}</p>
         </div>
+
+        ${oneDriveHtml}
 
         <table style="width: 100%; font-size: 14px; margin: 16px 0;">
           ${dataRows}

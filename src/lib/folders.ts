@@ -13,9 +13,14 @@ export const FOLDER_AUSSERKANTONAL = "Ausserkantonal";
 type Category = MandateType["category"];
 
 function sanitize(part: string): string {
-  // Schrägstriche würden die Ordnerhierarchie zerschiessen; restliche
-  // Zeichen (inkl. langer spanischer Namen mit Akzenten) bleiben erhalten.
-  return part.replace(/[\\/]+/g, "-").replace(/\s+/g, " ").trim();
+  // In OneDrive/SharePoint unzulässige Zeichen ersetzen; Akzente und sonstige
+  // Buchstaben (inkl. langer spanischer Namen) bleiben erhalten. Namen dürfen
+  // zudem nicht auf Punkt/Leerzeichen enden.
+  return part
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[. ]+$/, "");
 }
 
 /** Anzeigename des Kunden – Firmenname bzw. "Vorname Nachname". */
