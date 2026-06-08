@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MandateType, ClientInfo } from "@/lib/types";
+import { clientDisplayName } from "@/lib/folders";
 import StepIndicator from "@/components/StepIndicator";
 import MandateSelection from "@/components/MandateSelection";
 import ClientInfoForm from "@/components/ClientInfoForm";
@@ -10,66 +11,63 @@ import SuccessScreen from "@/components/SuccessScreen";
 
 const STEP_LABELS = ["Mandat wählen", "Angaben", "Dokumente"];
 
-type AppState =
-  | { step: 1 }
-  | { step: 2; mandate: MandateType }
-  | { step: 3; mandate: MandateType; clientInfo: ClientInfo }
-  | { step: 4; mandate: MandateType; clientInfo: ClientInfo; fileNames: string[] };
-
 export default function Home() {
-  const [state, setState] = useState<AppState>({ step: 1 });
+  const [step, setStep] = useState(1);
+  const [mandate, setMandate] = useState<MandateType | null>(null);
+  const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
+  const [fileNames, setFileNames] = useState<string[]>([]);
 
   function reset() {
-    setState({ step: 1 });
+    setStep(1);
+    setMandate(null);
+    setClientInfo(null);
+    setFileNames([]);
   }
 
   return (
     <div>
-      {state.step < 4 && (
-        <StepIndicator
-          currentStep={state.step}
-          totalSteps={3}
-          labels={STEP_LABELS}
-        />
+      {step < 4 && (
+        <StepIndicator currentStep={step} totalSteps={3} labels={STEP_LABELS} />
       )}
 
-      {state.step === 1 && (
+      {step === 1 && (
         <MandateSelection
-          onSelect={(mandate) => setState({ step: 2, mandate })}
+          onSelect={(m) => {
+            setMandate(m);
+            setStep(2);
+          }}
         />
       )}
 
-      {state.step === 2 && (
+      {step === 2 && mandate && (
         <ClientInfoForm
-          mandate={state.mandate}
-          onSubmit={(info) =>
-            setState({ step: 3, mandate: state.mandate, clientInfo: info })
-          }
-          onBack={() => setState({ step: 1 })}
+          mandate={mandate}
+          initial={clientInfo ?? undefined}
+          onSubmit={(info) => {
+            setClientInfo(info);
+            setStep(3);
+          }}
+          onBack={() => setStep(1)}
         />
       )}
 
-      {state.step === 3 && (
+      {step === 3 && mandate && clientInfo && (
         <DocumentUpload
-          mandate={state.mandate}
-          clientInfo={state.clientInfo}
-          onSubmit={(files: File[]) =>
-            setState({
-              step: 4,
-              mandate: state.mandate,
-              clientInfo: state.clientInfo,
-              fileNames: files.map((f) => f.name),
-            })
-          }
-          onBack={() => setState({ step: 2, mandate: state.mandate })}
+          mandate={mandate}
+          clientInfo={clientInfo}
+          onSubmit={(files: File[]) => {
+            setFileNames(files.map((f) => f.name));
+            setStep(4);
+          }}
+          onBack={() => setStep(2)}
         />
       )}
 
-      {state.step === 4 && (
+      {step === 4 && mandate && clientInfo && (
         <SuccessScreen
-          mandate={state.mandate.label}
-          clientName={state.clientInfo.name}
-          fileNames={state.fileNames}
+          mandate={mandate.label}
+          clientName={clientDisplayName(mandate.category, clientInfo)}
+          fileNames={fileNames}
           onReset={reset}
         />
       )}

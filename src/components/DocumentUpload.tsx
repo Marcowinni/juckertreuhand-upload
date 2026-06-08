@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { MandateType, ClientInfo, UploadedFile, CheckResult, ChecklistItemStatus } from "@/lib/types";
+import { clientDisplayName } from "@/lib/folders";
+
+// Kamera-Scanner (inkl. jsPDF) erst bei Bedarf laden – hält das Initial-Bundle klein.
+const CameraScanner = dynamic(() => import("@/components/CameraScanner"), { ssr: false });
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -11,6 +16,7 @@ const ACCEPTED_TYPES = [
   "image/tiff",
 ];
 const ACCEPTED_EXTENSIONS = ".pdf,.jpg,.jpeg,.png,.heic,.tiff,.tif";
+const ACCEPTED_EXT_LIST = ["pdf", "jpg", "jpeg", "png", "heic", "tiff", "tif"];
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const MAX_FILES = 20;
 const WARN_TOTAL_SIZE = 35 * 1024 * 1024; // 35MB
@@ -21,6 +27,8 @@ interface DocumentUploadProps {
   onSubmit: (files: File[], checkResult: CheckResult) => void;
   onBack: () => void;
 }
+
+const EMPTY_RESULT: CheckResult = { matched: [], missing: [], uncertain: [] };
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -36,6 +44,8 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
   const [dragOver, setDragOver] = useState(false);
   const [gdprAccepted, setGdprAccepted] = useState(false);
   const [tooltipId, setTooltipId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,13 +53,9 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
   const requiredItems = mandate.checklist.filter((c) => c.required);
   const optionalItems = mandate.checklist.filter((c) => !c.required);
 
-  const allRequiredMatched =
-    checkResult !== null &&
-    requiredItems.every((item) =>
-      checkResult.matched.some((m) => m.item === item.label)
-    );
-
-  const canSubmit = files.length > 0 && allRequiredMatched && gdprAccepted && !submitting;
+  // Alle Dokumente sind optional – eingereicht werden kann, sobald mindestens
+  // eine Datei vorhanden ist und der Datenschutzhinweis akzeptiert wurde.
+  const canSubmit = files.length > 0 && gdprAccepted && !submitting;
 
   const runCheck = useCallback(
     async (currentFiles: UploadedFile[]) => {
@@ -88,18 +94,26 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
 
   function addFiles(newFiles: FileList | File[]) {
     const toAdd: UploadedFile[] = [];
-    const fileArray = Array.from(newFiles);
+    let skippedSize = 0;
+    let skippedType = 0;
+    let skippedMax = 0;
 
-    for (const file of fileArray) {
-      if (files.length + toAdd.length >= MAX_FILES) break;
+    for (const file of Array.from(newFiles)) {
+      if (files.length + toAdd.length >= MAX_FILES) {
+        skippedMax++;
+        continue;
+      }
 
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
-      const isAccepted =
-        ACCEPTED_TYPES.includes(file.type) ||
-        ["pdf", "jpg", "jpeg", "png", "heic", "tiff", "tif"].includes(ext);
-
-      if (!isAccepted) continue;
-      if (file.size > MAX_FILE_SIZE) continue;
+      const isAccepted = ACCEPTED_TYPES.includes(file.type) || ACCEPTED_EXT_LIST.includes(ext);
+      if (!isAccepted) {
+        skippedType++;
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        skippedSize++;
+        continue;
+      }
 
       toAdd.push({ file, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
     }
@@ -109,6 +123,12 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
       setFiles(updated);
       scheduleCheck(updated);
     }
+
+    const messages: string[] = [];
+    if (skippedSize) messages.push(`${skippedSize} Datei(en) über 20 MB übersprungen`);
+    if (skippedType) messages.push(`${skippedType} Datei(en) mit nicht unterstütztem Format übersprungen`);
+    if (skippedMax) messages.push(`maximal ${MAX_FILES} Dateien möglich`);
+    setNotice(messages.join(" · "));
   }
 
   function removeFile(id: string) {
@@ -130,7 +150,7 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
   }
 
   async function handleSubmit() {
-    if (!canSubmit || !checkResult) return;
+    if (!canSubmit) return;
     setSubmitting(true);
 
     try {
@@ -144,14 +164,16 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
         })
       );
 
+      const result = checkResult ?? EMPTY_RESULT;
       const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mandate: mandate.label,
+          mandateCategory: mandate.category,
           clientInfo,
           files: fileData,
-          checkResult,
+          checkResult: result,
         }),
       });
 
@@ -159,7 +181,7 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
 
       onSubmit(
         files.map((f) => f.file),
-        checkResult
+        result
       );
     } catch (err) {
       console.error(err);
@@ -172,11 +194,14 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
   return (
     <div className="max-w-5xl mx-auto">
       <div className="text-center mb-8">
+        <p className="font-heading text-xs tracking-heading uppercase text-navy mb-2">
+          Schritt 3 — Dokumente
+        </p>
         <h2 className="font-heading text-2xl sm:text-3xl text-charcoal tracking-heading uppercase mb-2">
           Dokumente hochladen
         </h2>
         <p className="text-gray-500 text-sm">
-          {mandate.label} — {clientInfo.name} — {clientInfo.period}
+          {mandate.label} — {clientDisplayName(mandate.category, clientInfo)} — {clientInfo.period}
         </p>
       </div>
 
@@ -214,6 +239,21 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
               PDF, JPG, PNG, HEIC, TIFF — max. 20 MB pro Datei
             </p>
           </div>
+
+          {/* Kamera-Scan */}
+          <button
+            type="button"
+            onClick={() => setShowScanner(true)}
+            className="mt-3 w-full flex items-center justify-center gap-2 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-charcoal hover:border-navy hover:text-navy transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+            Mit Kamera scannen (mehrseitig)
+          </button>
+
+          {notice && <p className="mt-2 text-xs text-amber-600">{notice}</p>}
 
           {/* File chips */}
           {files.length > 0 && (
@@ -253,9 +293,15 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
 
         {/* Right: Checklist */}
         <div>
-          <h3 className="font-heading text-xs tracking-heading uppercase text-gray-400 mb-4">
-            Benötigte Dokumente
+          <p className="font-heading text-xs tracking-heading uppercase text-navy mb-1">
+            Dokumentenauswahl
+          </p>
+          <h3 className="font-heading text-sm tracking-heading uppercase text-charcoal mb-1">
+            Empfohlene Dokumente
           </h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Alle Dokumente sind optional – reichen Sie ein, was Sie zur Hand haben.
+          </p>
 
           {checking && (
             <div className="flex items-center gap-2 mb-3">
@@ -281,7 +327,7 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
           {optionalItems.length > 0 && (
             <>
               <h3 className="font-heading text-xs tracking-heading uppercase text-gray-400 mt-6 mb-4">
-                Optional
+                Ergänzend
               </h3>
               <div className="space-y-1.5">
                 {optionalItems.map((item) => {
@@ -343,6 +389,16 @@ export default function DocumentUpload({ mandate, clientInfo, onSubmit, onBack }
           </button>
         </div>
       </div>
+
+      {showScanner && (
+        <CameraScanner
+          onComplete={(scanned) => {
+            setShowScanner(false);
+            addFiles(scanned);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   );
 }
@@ -386,7 +442,6 @@ function ChecklistRow({
         <div className="flex-1 min-w-0">
           <span className={`text-sm ${status.status === "matched" ? "text-charcoal" : "text-gray-500"}`}>
             {item.label}
-            {item.required && <span className="text-red-400 ml-0.5">*</span>}
           </span>
           {status.status === "matched" && status.filename && (
             <p className="text-xs text-green-600 truncate">{status.filename}</p>

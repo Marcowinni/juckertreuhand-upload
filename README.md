@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Jucker Treuhand – Dokumenten-Upload-Portal
 
-## Getting Started
+Webportal, über das Kundinnen und Kunden ihre Steuer- und Buchhaltungs­unterlagen
+sicher an Jucker Treuhand übermitteln. Next.js (App Router) + Tailwind CSS.
 
-First, run the development server:
+## Ablauf
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+1. **Dokumentenauswahl** – Mandatstyp wählen (Privatperson oder Firma).
+2. **Angaben** – Kundenbeziehung (Neukunde / bestehend), Name (Vor-/Nachname bzw.
+   Firmenname), E-Mail, Telefon, Adresse (Strasse, PLZ, Ort), Periode, Bemerkungen.
+   **Alle Felder sind optional.**
+3. **Dokumente** – Dateien hochladen (Drag & Drop / Datei­auswahl) oder **mit der
+   Kamera mehrseitig scannen** (wird zu einem PDF zusammengefügt). Eine
+   KI-Prüfung ordnet die Dateien der Checkliste zu (rein informativ – nichts ist
+   Pflicht).
+4. **Bestätigung** – interne Benachrichtigung an Jucker Treuhand sowie optionale
+   Bestätigungs-E-Mail an die Kundin / den Kunden.
+
+## Automatische Ordner-Zuordnung
+
+Bei der Einreichung wird ein Zielordner berechnet und in der internen E-Mail
+ausgewiesen (`src/lib/folders.ts`):
+
+```
+Dokumente Jucker Treuhand/
+├─ Natürliche Personen ZH/        (Privatperson, PLZ im Kanton Zürich)
+│  └─ <Nachname Vorname>/
+│     └─ Unverarbeitete Dokumente/
+├─ Ausserkantonal/                (Privatperson, PLZ ausserhalb ZH)
+│  └─ <Nachname Vorname>/
+│     └─ Unverarbeitete Dokumente/
+└─ <Firmenname>/                  (Firma direkt unter dem Firmennamen)
+   └─ Unverarbeitete Dokumente/
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Die ZH-/Ausserkantonal-Erkennung erfolgt über die PLZ (`src/lib/zurich-plz.ts`).
+Eine unbekannte PLZ wird als Zürich behandelt; massgeblich bleibt der in der
+E-Mail genannte Zielordner, den Jucker Treuhand jederzeit korrigieren kann.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> Hinweis: Aktuell wird der Zielordner-Pfad in der Benachrichtigungs-E-Mail
+> mitgeschickt (Ablage durch Jucker Treuhand). Eine automatische Ablage direkt
+> in Google Drive ist als Folgeschritt möglich und würde Google-Zugangsdaten
+> (Service-Account) voraussetzen.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Umgebungsvariablen
 
-## Learn More
+In `.env.local` (lokal) bzw. in den Projekt­einstellungen (Vercel) setzen:
 
-To learn more about Next.js, take a look at the following resources:
+| Variable            | Zweck                                                              |
+| ------------------- | ----------------------------------------------------------------- |
+| `RESEND_API_KEY`    | Versand der E-Mails über [Resend](https://resend.com).            |
+| `NOTIFY_EMAIL`      | Interne Empfängeradresse(n). Mehrere kommagetrennt möglich.       |
+| `ANTHROPIC_API_KEY` | KI-gestützte Dokumentenprüfung (`/api/check-documents`).          |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Entwicklung
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # Produktions-Build
+npm run lint
+```

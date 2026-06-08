@@ -14,11 +14,15 @@ export default function MandateSelection({ onSelect }: MandateSelectionProps) {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-10">
+        <p className="font-heading text-xs tracking-heading uppercase text-navy mb-2">
+          Schritt 1 — Dokumentenauswahl
+        </p>
         <h2 className="font-heading text-2xl sm:text-3xl text-charcoal tracking-heading uppercase mb-2">
-          Mandat wählen
+          Welche Unterlagen möchten Sie einreichen?
         </h2>
         <p className="text-gray-500 text-sm">
-          Wählen Sie den passenden Auftragstyp für Ihre Unterlagen.
+          Wählen Sie den passenden Auftragstyp – wir zeigen Ihnen anschliessend die dazu
+          passenden Dokumente an.
         </p>
       </div>
 

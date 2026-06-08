@@ -12,9 +12,22 @@ export interface MandateType {
   checklist: ChecklistItem[];
 }
 
+export type CustomerType = "neu" | "bestehend";
+
 export interface ClientInfo {
-  name: string;
+  customerType: CustomerType;
+  // Privatperson (separat erfasst, unterstützt auch lange/mehrteilige Namen)
+  vorname: string;
+  nachname: string;
+  // Firma
+  firmenname: string;
+  // Kontakt & Adresse
   email: string;
+  telefon: string;
+  strasse: string;
+  plz: string;
+  ort: string;
+  // Auftrag
   period: string;
   remarks: string;
 }
