@@ -1,0 +1,39 @@
+name: Check
+
+# Minimal-Gate: ohne das prüft NICHTS diesen Code — weder ein Dependabot-Update
+# noch ein Agent-PR wäre vor dem Merge verifiziert. Build ist der Härtetest
+# (Typecheck läuft in Next/Vite mit), Lint bleibt informativ.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Install + Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        continue-on-error: true
+        run: npm run lint
