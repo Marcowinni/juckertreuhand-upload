@@ -1,0 +1,80 @@
+name: Dependabot auto-merge
+
+# Merged NUR Patch-Updates von Dependabot, und NUR wenn vorher jeder Check auf
+# dem PR gruen ist — inklusive der externen (Vercel-Build, Secret-Scan). Der
+# Sinn von Auto-Merge steht und faellt damit, dass wirklich etwas prueft; in
+# diesem Repo laeuft auf jedem PR ein echter Build.
+#
+# Bewusst NICHT automatisch: minor und major. Ein Minor darf laut semver
+# Verhalten aendern, und "der Build ist gruen" ist kein Beweis, dass die
+# Aenderung passt. Die bleiben bei Marco.
+#
+# Security-Updates von Dependabot kommen unabhaengig hiervon und koennen jede
+# Stufe haben — auch die laufen durch dieselbe Pruefung.
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Update-Typ ermitteln
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auf alle uebrigen Checks warten
+        # Wartet auf JEDEN Check ausser diesem Job selbst — sonst wartet der
+        # Job auf sich und laeuft in den Timeout. Bricht ab, sobald einer
+        # fehlschlaegt; ein noch laufender Check ist kein Gruen.
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          SELF: auto-merge
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 50); do
+            RUNS=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
+                     --jq "[.check_runs[] | select(.name != \"$SELF\")]")
+            STATES=$(gh api "repos/${{ github.repository }}/commits/$SHA/status" --jq '.statuses[].state' 2>/dev/null || true)
+
+            FAILED=$(echo "$RUNS" | jq '[.[] | select(.conclusion != null and (.conclusion | IN("success","neutral","skipped") | not))] | length')
+            FAILED_ST=$(echo "$STATES" | grep -cE '^(failure|error)$' || true)
+            if [ "$FAILED" -gt 0 ] || [ "$FAILED_ST" -gt 0 ]; then
+              echo "Mindestens ein Check ist fehlgeschlagen — kein Auto-Merge."
+              echo "$RUNS" | jq -r '.[] | select(.conclusion != null and (.conclusion | IN("success","neutral","skipped") | not)) | "  FAIL: \(.name)"'
+              exit 1
+            fi
+
+            PENDING=$(echo "$RUNS" | jq '[.[] | select(.conclusion == null)] | length')
+            PENDING_ST=$(echo "$STATES" | grep -c '^pending$' || true)
+            TOTAL=$(echo "$RUNS" | jq 'length')
+            if [ "$TOTAL" -gt 0 ] && [ "$PENDING" -eq 0 ] && [ "$PENDING_ST" -eq 0 ]; then
+              echo "Alle $TOTAL Checks gruen."
+              exit 0
+            fi
+            echo "warte… ($PENDING laufend von $TOTAL)"
+            sleep 20
+          done
+          echo "Timeout beim Warten auf die Checks — kein Auto-Merge."
+          exit 1
+
+      - name: Patch mergen
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --squash --delete-branch "${{ github.event.pull_request.html_url }}"
+
+      - name: Minor/Major bleibt liegen
+        if: steps.meta.outputs.update-type != 'version-update:semver-patch'
+        run: echo "::notice::${{ steps.meta.outputs.update-type }} — bleibt fuer manuellen Review offen."
