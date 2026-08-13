@@ -1,21 +1,28 @@
-# Security-Alerts + automatische Security-Fix-PRs sind repo-weit aktiviert
-# (GitHub-Setting, nicht diese Datei). Hier steht nur der Version-Update-Teil:
-# wöchentlich, gruppiert, gedeckelt — sonst erzeugt ein Next-App-Repo zweistellig
-# viele PRs pro Woche, die niemand liest, und der Kanal wird wertlos.
 version: 2
+
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  # App + tooling dependencies (single root pnpm-lock.yaml covers the workspace).
+  # Grouped into one PR/week so a solo maintainer reviews upgrades in one pass
+  # instead of drowning in per-package noise. Majors are separated out so a
+  # breaking bump is never silently folded into a routine group.
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: weekly
+      day: monday
     open-pull-requests-limit: 5
     groups:
       minor-and-patch:
-        update-types: ["minor", "patch"]
+        update-types: [minor, patch]
+      majors:
+        update-types: [major]
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # Keep the CI actions themselves patched (SHA-pinned in the workflow; Dependabot
+  # bumps the SHA + version comment together). This is the direct defense against
+  # a compromised third-party action (cf. the tj-actions tag-retargeting incident).
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 2
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
