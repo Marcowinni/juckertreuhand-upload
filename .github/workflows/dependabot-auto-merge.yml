@@ -21,7 +21,10 @@ permissions:
 
 jobs:
   auto-merge:
-    if: github.actor == 'dependabot[bot]'
+    # PR-AUTOR pruefen, nicht github.actor: letzterer ist der Ausloeser des Events.
+    # Bei einem reopen durch einen Menschen waere das der Mensch, und der Job
+    # wuerde stillschweigend uebersprungen.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

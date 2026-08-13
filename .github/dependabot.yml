@@ -1,10 +1,15 @@
 version: 2
 
 updates:
-  # App + tooling dependencies (single root pnpm-lock.yaml covers the workspace).
-  # Grouped into one PR/week so a solo maintainer reviews upgrades in one pass
-  # instead of drowning in per-package noise. Majors are separated out so a
-  # breaking bump is never silently folded into a routine group.
+  # Drei getrennte Gruppen statt zwei — bewusst abweichend vom Muster in den
+  # uebrigen Repos, und zwar aus einem funktionalen Grund: bei einem
+  # Gruppen-PR meldet dependabot/fetch-metadata den HOECHSTEN Sprung der
+  # Gruppe. Waeren patch und minor zusammen, hiesse die Gruppe "minor" und der
+  # Auto-Merge (nur patch) wuerde nie greifen.
+  #
+  # Nebeneffekt fuer den manuellen Teil: der Patch-PR merged sich selbst, der
+  # Minor-PR kommt einzeln und wird richtig angeschaut statt im Sammel-PR
+  # mitzulaufen.
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -12,14 +17,13 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
-      minor-and-patch:
-        update-types: [minor, patch]
+      patch:
+        update-types: [patch]
+      minor:
+        update-types: [minor]
       majors:
         update-types: [major]
 
-  # Keep the CI actions themselves patched (SHA-pinned in the workflow; Dependabot
-  # bumps the SHA + version comment together). This is the direct defense against
-  # a compromised third-party action (cf. the tj-actions tag-retargeting incident).
   - package-ecosystem: github-actions
     directory: /
     schedule:
