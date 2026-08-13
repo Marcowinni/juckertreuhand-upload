@@ -1,0 +1,21 @@
+# Security-Alerts + automatische Security-Fix-PRs sind repo-weit aktiviert
+# (GitHub-Setting, nicht diese Datei). Hier steht nur der Version-Update-Teil:
+# wöchentlich, gruppiert, gedeckelt — sonst erzeugt ein Next-App-Repo zweistellig
+# viele PRs pro Woche, die niemand liest, und der Kanal wird wertlos.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
